@@ -106,7 +106,7 @@ namespace ConsoleAppAPI_II_GigaChat
                 foreach (var s in top)
                     Console.WriteLine($"    [{s.Score:0.00}] {s.Doc.Title}");
 
-                // (3) ФИНАЛ-МОСТИК (RAG): отдаём найденные заметки в GigaChat как контекст —
+                // (3) RAG (Retrieval-Augmented Generation): отдаём найденные заметки в GigaChat как контекст —
                 //     он отвечает СТРОГО по ним. 
                 string answer = AskWithContext(question, top, accessToken, chatUrl);
                 Console.WriteLine($"\nНаставник: {answer}\n");
