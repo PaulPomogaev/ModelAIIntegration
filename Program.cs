@@ -182,6 +182,11 @@ namespace ConsoleAppAPI_II_GigaChat
             }
         }
 
+        static string AskGigaChat(List<ChatMessage> history, string accessToken, string chatUrl, List<FunctionDef> functions)
+        {
+
+        }
+
         static string AskGigaChat(List<ChatMessage> history, string accessToken, string chatUrl) // Метод отправки запроса к чат-модели GigaChat
         {
             Log.Debug("Отправка запроса к GigaChat. История содержит {Count} сообщений", history.Count);
@@ -263,7 +268,17 @@ namespace ConsoleAppAPI_II_GigaChat
           [property: JsonPropertyName("expires_at")] long ExpiresAt);  // Класс для десериализации ответа токена
 
         record ChatMessage(string Role, string Content);  // Модель сообщения чата
-        record ChatRequest(string Model, List<ChatMessage> Messages);  // Модель запроса к GigaChat
+                                                          
+        // Тело запроса к чату: модель + история (+ опц. функции, режим их вызова, температура).
+        // Temperature шлём только когда нужна предсказуемость (GenerateQuiz); WhenWritingNull
+        // в JsonOpts означает, что для обычных запросов поле не сериализуется (модель берёт дефолт).
+        record ChatRequest(
+            string Model,
+            List<ChatMessage> Messages,
+            List<FunctionDef>? Functions = null,
+            [property: JsonPropertyName("function_call")] string? FunctionCallMode = null,
+            [property: JsonPropertyName("temperature")] double? Temperature = null);
+
         record ChatResponse(List<Choice> Choices);  // Модель ответа от GigaChat
         record Choice(ChatMessage Message); // Один вариант ответа (выбор)      
         record FunctionDef(string Name, string Description, object Parameters); // Описание функции для модели: имя, что делает, и схема параметров (JSON Schema).
