@@ -635,5 +635,7 @@ namespace ConsoleAppAPI_II_GigaChat
         record StudyTopic(string Title, string Priority, string? Note, bool Studied = false, int CorrectAnswers = 0); // Тема в плане изучения. Studied ставит функция mark_studied; изученные темы — поиск по смыслу «повтори пройденное».
 
         record QuizQuestion(string Question, string[] Options, int CorrectIndex, string Explanation); // Тест-вопрос, который достаём структурированным выводом в GenerateQuiz (движок инструмента quiz_me).
+
+        record KnowledgeDoc(string Title, string Text); // модель документа тестовой базы знаний
     }
 }
