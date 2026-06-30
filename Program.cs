@@ -182,7 +182,7 @@ namespace ConsoleAppAPI_II_GigaChat
                         // functions_state_id — GigaChat ждёт его обратно) и выполняем функцию.
                         history.Add(reply with { Content = reply.Content ?? "" });
 
-                        string result = ExecuteFunction(reply.FunctionCall, accessToken);
+                        string result = ExecuteFunction(reply.FunctionCall, accessToken, chatUrl);
 
                         history.Add(new ChatMessage("function", result, Name: reply.FunctionCall.Name));
 
@@ -223,7 +223,7 @@ namespace ConsoleAppAPI_II_GigaChat
         //  ВЫПОЛНЕНИЕ ФУНКЦИЙ, которые захотела вызвать модель.
         //  Возвращаем результат JSON-строкой — её увидит модель.
         // ─────────────────────────────────────────────────────────────────────────
-        private static string ExecuteFunction(FunctionCall call, string accessToken)
+        private static string ExecuteFunction(FunctionCall call, string accessToken, string chatUrl)
         {
             switch (call.Name)
             {
@@ -274,7 +274,7 @@ namespace ConsoleAppAPI_II_GigaChat
                         QuizQuestion quiz;
                         try
                         {
-                            quiz = GenerateQuiz(topic, accessToken);
+                            quiz = GenerateQuiz(topic, accessToken, chatUrl);
                         }
                         catch (Exception ex)
                         {
@@ -328,6 +328,59 @@ namespace ConsoleAppAPI_II_GigaChat
                     // Модель попросила функцию, которой у нас нет — честно говорим об этом.
                     return JsonSerializer.Serialize(new { error = $"Неизвестная функция: {call.Name}" }, JsonOpts);
             }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  СТРУКТУРИРОВАННЫЙ ВЫВОД: просим модель вернуть строгий JSON (тест-вопрос)
+        //  и разбираем его в объект C#. Это ДВИЖОК инструмента quiz_me.
+        //  Живая генерация — единственный источник вопроса. Структурированный вывод
+        //  гарантирует ФОРМУ (4 варианта + индекс верного), но НЕ правильность фактов:
+        //  по слабым для модели темам вопрос может выйти с шероховатостями — для демо ок.
+        // ─────────────────────────────────────────────────────────────────────────
+        private static QuizQuestion GenerateQuiz(string topic, string accessToken, string chatUrl)
+        {
+
+            // Системный промпт генератора теста: держим модель в её зоне — факты языка C#
+            // (ключевые слова, типы, синтаксис, операторы, коллекции, строки, ООП) — и
+            // задаём строгую JSON-схему ответа. Это и есть «управление моделью» из Дня 2.
+            const string GeneratorSystemPrompt =
+                "Ты — генератор тест-вопросов про язык C# для начинающих. " +
+                "Спрашивай про факты самого языка и базовой библиотеки .NET: ключевые слова (var, const, readonly, static, ref, out), " +
+                "типы и их различия (struct и class, значимые и ссылочные, nullable), синтаксис, поведение операторов, " +
+                "базовые коллекции (List<T>, Dictionary<TKey,TValue>), строки, исключения, ООП в C#. " +
+                "Сначала ВЫБЕРИ один факт, в котором уверен, сделай его верным ответом, затем придумай 3 правдоподобных, но неверных. " +
+                "Вопрос должен быть КОНКРЕТНЫМ (про конкретное ключевое слово, тип или метод), а не общим рассуждением. " +
+                "Верни ТОЛЬКО JSON-объект по схеме:\n" +
+                "{ \"question\": строка, \"options\": [ровно 4 строки], \"correctIndex\": число 0..3, \"explanation\": строка }\n" +
+                "correctIndex — позиция верного варианта в options, нумерация с НУЛЯ. explanation объясняет именно options[correctIndex]. " +
+                "Ровно один верный вариант, остальные три неверны. Без markdown, без текста до или после JSON.";
+
+
+
+            var messages = new List<ChatMessage>
+            {
+                new("system", GeneratorSystemPrompt),
+                // FEW-SHOT: один образец задаёт И форму JSON, И стиль (конкретный факт языка).
+                //new("user", "Тема для теста (про язык C#): ключевое слово var"),
+                //new("assistant",
+                //    "{\"question\":\"Что делает ключевое слово var при объявлении локальной переменной в C#?\"," +
+                //    "\"options\":[\"Тип выводится компилятором из выражения справа\"," +
+                //    "\"Создаёт переменную без типа, как в JavaScript\"," +
+                //    "\"Объявляет переменную, которую нельзя переприсвоить\"," +
+                //    "\"Делает переменную видимой во всех методах класса\"]," +
+                //    "\"correctIndex\":0,\"explanation\":\"var — это неявная типизация: компилятор сам выводит конкретный тип из инициализатора, переменная остаётся строго типизированной.\"}"),
+                new("user", $"Тема для теста (про язык C#): {topic}"),
+            };
+
+            // Низкая температура: строгому вопросу нужна предсказуемость, а не фантазия.
+            // Иногда модель оборачивает JSON в ```json ... ``` — срежем «забор».
+            //string clean = StripJsonFences(AskRaw(messages, temperature: 0.2));
+            string clean = AskRaw(messages, accessToken, chatUrl, temperature: 0.2);
+
+            // Кривой JSON бросит из Deserialize, пустой ("null") — поймаем через ??.
+            // Любую ошибку перехватит обработчик quiz_me и попросит модель повторить.
+            return JsonSerializer.Deserialize<QuizQuestion>(clean, JsonOpts)
+                   ?? throw new InvalidOperationException("Модель вернула пустой JSON вместо тест-вопроса.");
         }
 
         private static string? GetStr(JsonElement obj, string field) // берёт JSON элемент и достаёт из него значение свойства, если его тип sting иначе возвращает null
