@@ -185,7 +185,7 @@ namespace ConsoleAppAPI_II_GigaChat
                         // Финальный ответ просим УЖЕ БЕЗ функций: модель обязана ответить текстом
                         // и не зациклится на повторных вызовах одной и той же функции (Function
                         // Calling у GigaChat в бете это любит — звал бы list_topics по кругу).
-                        answer = AskRaw(history, accessToken);
+                        answer = AskRaw(history, accessToken, chatUrl);
                     }
                     else
                     {
@@ -204,6 +204,21 @@ namespace ConsoleAppAPI_II_GigaChat
                 
             }
         }
+
+        // Простой запрос без функций — возвращает текст. Используется и в GenerateQuiz
+        // (с низкой температурой — нужен предсказуемый JSON), и для финального ответа
+        // после вызова функции (без функций модель не зациклится).
+        private static string AskRaw(List<ChatMessage> messages, string accessToken, string chatUrl, double? temperature = null)
+        {
+            var body = new ChatRequest("GigaChat", messages, Temperature: temperature);
+            ChatResponse result = PostChat(body, accessToken, _httpClient, chatUrl);
+            return result.Choices[0].Message.Content ?? "";
+        }
+
+
+
+
+
 
         static ChatMessage AskGigaChat(List<ChatMessage> history, string accessToken, string chatUrl, List<FunctionDef> functions)
         {
