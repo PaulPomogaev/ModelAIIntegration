@@ -169,7 +169,29 @@ namespace ConsoleAppAPI_II_GigaChat
 
                 try
                 {
-                    var answer = AskGigaChat(history, accessToken, chatUrl); // Отправляем всю историю в GigaChat и получаем ответ
+                    var reply = AskGigaChat(history, accessToken, chatUrl, functions); // Отправляем всю историю в GigaChat и получаем ответ
+
+                    string answer;
+                    if (reply.FunctionCall is not null)
+                    {
+                        // Модель решила вызвать функцию. Сохраняем её «ход» (вместе с
+                        // functions_state_id — GigaChat ждёт его обратно) и выполняем функцию.
+                        history.Add(reply with { Content = reply.Content ?? "" });
+
+                        string result = ExecuteFunction(reply.FunctionCall, accessToken);
+
+                        history.Add(new ChatMessage("function", result, Name: reply.FunctionCall.Name));
+
+                        // Финальный ответ просим УЖЕ БЕЗ функций: модель обязана ответить текстом
+                        // и не зациклится на повторных вызовах одной и той же функции (Function
+                        // Calling у GigaChat в бете это любит — звал бы list_topics по кругу).
+                        answer = AskRaw(history, accessToken);
+                    }
+                    else
+                    {
+                        // Функция не нужна — это обычный текстовый ответ.
+                        answer = reply.Content ?? "";
+                    }
 
                     history.Add(new ChatMessage("assistant", answer)); // Сохраняем ответ ассистента в историю
                     Console.WriteLine($"GigaChat: {answer}"); // Выводим ответ пользователю
@@ -282,8 +304,21 @@ namespace ConsoleAppAPI_II_GigaChat
           [property: JsonPropertyName("access_token")] string AccessToken,
           [property: JsonPropertyName("expires_at")] long ExpiresAt);  // Класс для десериализации ответа токена
 
-        record ChatMessage(string Role, string Content);  // Модель сообщения чата
-                                                          
+        // Сообщение в переписке. Кроме role/content может нести:
+        //   • function_call — когда модель (assistant) решила вызвать функцию;
+        //   • functions_state_id — служебный id, который GigaChat просит вернуть обратно;
+        //   • name — имя функции, когда мы отправляем РЕЗУЛЬТАТ (role = "function").
+        record ChatMessage(
+            string Role,
+            string? Content,
+            [property: JsonPropertyName("function_call")] FunctionCall? FunctionCall = null,
+            [property: JsonPropertyName("functions_state_id")] string? FunctionsStateId = null,
+            string? Name = null);
+
+        // Вызов функции от модели: имя + аргументы. У GigaChat arguments — это JSON-ОБЪЕКТ,
+        // поэтому читаем его универсально как JsonElement (а не как строку, как в OpenAI).
+        record FunctionCall(string Name, JsonElement Arguments);
+
         // Тело запроса к чату: модель + история (+ опц. функции, режим их вызова, температура).
         // Temperature шлём только когда нужна предсказуемость (GenerateQuiz); WhenWritingNull
         // в JsonOpts означает, что для обычных запросов поле не сериализуется (модель берёт дефолт).
