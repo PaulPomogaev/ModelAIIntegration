@@ -69,6 +69,7 @@ namespace ConsoleAppAPI_II_GigaChat
             string authKey = configuration["GigaChat:AuthKey"];  // Базовый ключ авторизации для API
             var chatUrl = configuration["GigaChat:ChatUrl"];
             var authUrl = configuration["GigaChat:AuthUrl"];
+            var embeddingsUrl = configuration["GigaChat:EmbeddingsUrl"];
 
             var accessToken = GetAccessToken(authKey, authUrl); // Получаем временный токен доступа (Bearer) по ключу
 
@@ -77,7 +78,7 @@ namespace ConsoleAppAPI_II_GigaChat
             //     пары {заметка, вектор}. Это хранилище для поиска. Делаем ОДНИМ
             //     батч-запросом — список текстов разом (один поход в сеть на всю базу).
             Console.WriteLine($"Индексирую базу знаний ({Knowledge.Length} заметок)...");
-            float[][] vectors = Embed(Knowledge.Select(d => $"{d.Title}. {d.Text}").ToList(), accessToken);
+            float[][] vectors = Embed(Knowledge.Select(d => $"{d.Title}. {d.Text}").ToList(), accessToken, embeddingsUrl);
 
             var knowledgeIndexes = new List<Indexed>();
             for (int i = 0; i < Knowledge.Length; i++)
@@ -252,6 +253,35 @@ namespace ConsoleAppAPI_II_GigaChat
                 }
                 
             }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Метод эмбеддинга превращает тексты в векторы чисел (координаты смысла).
+        //  Один запрос принимает СПИСОК строк (input) и возвращает по вектору на каждую.
+        // ─────────────────────────────────────────────────────────────────────────
+        private static float[][] Embed(List<string> texts, string accessToken, string embeddingsUrl)
+        {
+            var body = new EmbeddingRequest("Embeddings", texts);
+            string json = JsonSerializer.Serialize(body, JsonOpts);
+                        
+            using var request = new HttpRequestMessage(HttpMethod.Post, embeddingsUrl)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            using var response = _httpClient.Send(request);
+            response.EnsureSuccessStatusCode();
+
+            var result = JsonSerializer.Deserialize<EmbeddingResponse>(ReadBody(response), JsonOpts)!;
+
+            // У каждого вектора index = позиция текста во входном списке. Сортируем по index,
+            // чтобы порядок векторов ТОЧНО совпал с порядком входных текстов.
+            return result.Data
+                .OrderBy(d => d.Index)
+                .Select(d => d.Embedding)
+                .ToArray();
         }
 
         // Простой запрос без функций — возвращает текст. Используется и в GenerateQuiz
@@ -649,6 +679,17 @@ namespace ConsoleAppAPI_II_GigaChat
 
         record QuizQuestion(string Question, string[] Options, int CorrectIndex, string Explanation); // Тест-вопрос, который достаём структурированным выводом в GenerateQuiz (движок инструмента quiz_me).
 
+        // ── Эмбеддинги ───────────────────────────────────────────────────────────────
+        
+        record EmbeddingRequest(string Model, List<string> Input); // Запрос: имя модели эмбеддингов + список текстов (input принимает массив строк).
+        
+        record EmbeddingResponse(List<EmbeddingData> Data); // Ответ: список векторов; у каждого Embedding — числа, Index — позиция текста во входе.
+        record EmbeddingData(float[] Embedding, int Index); // модель информации эмбеддингов, содержащая массив векторов и индекс соотвествующего текста
         record KnowledgeDoc(string Title, string Text); // модель документа тестовой базы знаний
+
+        
+        record Indexed(KnowledgeDoc Doc, float[] Vector); // Модель проиндексированной заметки: сам документ + его вектор смысла.
+
+        record Scored(KnowledgeDoc Doc, double Score);  // Модель оценки проиндексированной заметки в отношении близости по смыслу с запросоом
     }
 }
