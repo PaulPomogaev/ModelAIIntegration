@@ -70,6 +70,7 @@ namespace ConsoleAppAPI_II_GigaChat
                     "- Вызывай функцию ТОЛЬКО когда она действительно нужна. За один ответ — не больше одного вызова функции.\n" +
                     "- Не придумывай сам текст тест-вопроса и варианты — их ВСЕГДА формирует функция quiz_me. " +
                     "Ты лишь объявляешь о начале проверки и комментируешь её результат.\n" +
+                    "- Если в результате выполнения quiz_me пришло поле milestone_reached равное true, ты должен немедленно вызвать mark_studied для указанной темы, не спрашивая ученика. " +
                     "- Когда пришёл результат quiz_me: если ответ верный — кратко похвали и предложи отметить тему " +
                     "изученной (mark_studied) или добавить смежную; если неверный — мягко разбери ошибку одним " +
                     "предложением и предложи оставить тему на повтор.\n" +
@@ -153,6 +154,7 @@ namespace ConsoleAppAPI_II_GigaChat
                     "- Вызывай функцию ТОЛЬКО когда она действительно нужна. За один ответ — не больше одного вызова функции.\n" +
                     "- Не придумывай сам текст тест-вопроса и варианты — их ВСЕГДА формирует функция quiz_me. " +
                     "Ты лишь объявляешь о начале проверки и комментируешь её результат.\n" +
+                    "- Если в результате выполнения quiz_me пришло поле milestone_reached равное true, ты должен немедленно вызвать mark_studied для указанной темы, не спрашивая ученика. " +
                     "- Когда пришёл результат quiz_me: если ответ верный — кратко похвали и предложи отметить тему " +
                     "изученной (mark_studied) или добавить смежную; если неверный — мягко разбери ошибку одним " +
                     "предложением и предложи оставить тему на повтор.\n" +
@@ -255,7 +257,7 @@ namespace ConsoleAppAPI_II_GigaChat
                         int idx = plan.FindIndex(t => t.Title.Contains(title, StringComparison.OrdinalIgnoreCase));
                         if (idx >= 0)
                         {
-                            plan[idx] = plan[idx] with { Studied = true };   // record + with: новый экземпляр, Studied=true
+                            plan[idx] = plan[idx] with { Studied = true, CorrectAnswers = 0 };   // record + with: новый экземпляр, Studied=true
                             Console.WriteLine($"  [отметил изученным: {plan[idx].Title}]");
                         }
                         return JsonSerializer.Serialize(
@@ -337,6 +339,42 @@ namespace ConsoleAppAPI_II_GigaChat
                         Console.Write($"Твой ответ (1-{quiz.Options.Length}): ");
                         bool parsed = int.TryParse(Console.ReadLine(), out int num);
                         bool correct = parsed && num >= 1 && num <= quiz.Options.Length && num - 1 == quiz.CorrectIndex;
+                                                
+                        bool milestoneReached = false; // Обновляем статистику, если ответ правильный
+                        string canonicalTopic = topic; // будем хранить точное название темы из плана, если найдём
+
+                        if (correct)
+                        {
+                            // Ищем тему в плане по вхождению (как в mark_studied)
+                            var matched = plan.FirstOrDefault(t =>
+                                t.Title.Contains(topic, StringComparison.OrdinalIgnoreCase));
+                            if (matched != null)
+                            {
+                                canonicalTopic = matched.Title; // точное название из плана
+                                int newCount = matched.CorrectAnswers + 1;
+                                int idx = plan.FindIndex(t => t.Title == matched.Title);
+                                if (idx >= 0)
+                                {
+                                    plan[idx] = plan[idx] with { CorrectAnswers = newCount };
+                                    if (newCount >= 5 && !plan[idx].Studied)
+                                        milestoneReached = true;
+                                }
+                            }
+                        }
+
+                        var resultObj = new
+                        {
+                            topic = canonicalTopic, // отдаём точное название, чтобы модель могла вызвать mark_studied
+                            question = quiz.Question,
+                            userAnswer = parsed ? num : (int?)null,
+                            correct,
+                            correctOption = quiz.Options[quiz.CorrectIndex], // здесь используем исходный correctIndex
+                            explanation = quiz.Explanation,
+                            milestone_reached = milestoneReached,
+                            message = milestoneReached
+                            ? $"🎉 Вы правильно ответили на 5 тестов по теме «{canonicalTopic}». Тему можно отметить как изученную."
+                            : null
+                        };
 
                         // (4) Мгновенный фидбэк ученику.
                         Console.WriteLine(correct ? "✅ Верно!" : "❌ Неверно.");
@@ -344,15 +382,7 @@ namespace ConsoleAppAPI_II_GigaChat
 
                         // (5) Возвращаем модели структурный вердикт — она прокомментирует
                         //     и сможет предложить mark_studied / add_topic.
-                        return JsonSerializer.Serialize(new
-                        {
-                            topic,
-                            question = quiz.Question,
-                            userAnswer = parsed ? num : (int?)null,
-                            correct,
-                            correctOption = quiz.Options[correctIndex],
-                            explanation = quiz.Explanation,
-                        }, JsonOpts);
+                        return JsonSerializer.Serialize(resultObj, JsonOpts);
                     }
 
                 default:
@@ -392,7 +422,7 @@ namespace ConsoleAppAPI_II_GigaChat
                     "{ \"question\": строка, \"options\": [ровно 5 строк], \"correctIndex\": число 0..4, \"explanation\": строка }\n" +
                     "correctIndex — позиция верного варианта, нумерация с НУЛЯ. explanation подробно разъясняет верный ответ.",
 
-                _ => // medium по умолчанию
+                _ => // medium по-умолчанию
                     "Ты — генератор тест-вопросов про язык C# для начинающих. " +
                     "Спрашивай про факты самого языка и базовой библиотеки .NET: ключевые слова (var, const, readonly, static, ref, out), " +
                     "типы и их различия (struct и class, значимые и ссылочные, nullable), синтаксис, поведение операторов, " +
@@ -575,7 +605,7 @@ namespace ConsoleAppAPI_II_GigaChat
         record Choice(ChatMessage Message); // Один вариант ответа (выбор)      
         record FunctionDef(string Name, string Description, object Parameters); // Описание функции для модели: имя, что делает, и схема параметров (JSON Schema).
                 
-        record StudyTopic(string Title, string Priority, string? Note, bool Studied = false); // Тема в плане изучения. Studied ставит функция mark_studied; изученные темы — поиск по смыслу «повтори пройденное».
+        record StudyTopic(string Title, string Priority, string? Note, bool Studied = false, int CorrectAnswers = 0); // Тема в плане изучения. Studied ставит функция mark_studied; изученные темы — поиск по смыслу «повтори пройденное».
 
         record QuizQuestion(string Question, string[] Options, int CorrectIndex, string Explanation); // Тест-вопрос, который достаём структурированным выводом в GenerateQuiz (движок инструмента quiz_me).
     }
