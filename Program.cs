@@ -1,19 +1,15 @@
 ﻿using Serilog;
 using Microsoft.Extensions.Configuration;
 using Serilog.Sinks.SystemConsole.Themes;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Net.Http;
-using System.Numerics;
-using System;
-using ConsoleAppAPI_II_GigaChat.GigaChat;
-using ConsoleAppAPI_II_GigaChat.GigaChat.Models;
-using ConsoleAppAPI_II_GigaChat.Knowledge;
-using ConsoleAppAPI_II_GigaChat.Tutor;
+using GigaChatIntegrationCore.GigaChat.Models;
+using GigaChatIntegrationCore.GigaChat;
+using GigaChatIntegrationCore.Knowledge.Models;
+using GigaChatIntegrationCore.Knowledge;
+using GigaChatIntegrationCore.Tutor;
+using GigaChatIntegrationCore.Tutor.Models;
 
-namespace ConsoleAppAPI_II_GigaChat
+
+namespace GigaChatIntegration
 {
     internal class Program
     {
