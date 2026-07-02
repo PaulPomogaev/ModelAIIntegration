@@ -31,8 +31,9 @@ namespace ConsoleAppAPI_II_GigaChat.Knowledge
             }
 
             _chunks = new List<Chunk>();
-            foreach (var batch in Batch(pending, 50))
+            foreach (var batch in Batch(pending, 10))
             {
+                
                 float[][] vectors = gc.Embed(batch.Select(p => p.Text).ToList());
                 for (int i = 0; i < batch.Count; i++)
                     _chunks.Add(new Chunk(batch[i].Source, batch[i].Text, vectors[i]));
@@ -82,6 +83,19 @@ namespace ConsoleAppAPI_II_GigaChat.Knowledge
                 if (piece.Length < 80)   // если кусок слишком короткий, присоединяем к следующему
                 {
                     carry = piece;
+                    continue;
+                }
+                //  если кусок слишком длинный (>1500 символов), режем его
+                if (piece.Length > 1500)
+                {
+                    // Разбиваем на части по ~1000 символов (можно настроить)
+                    const int chunkSize = 1000;
+                    for (int i = 0; i < piece.Length; i += chunkSize)
+                    {
+                        int len = Math.Min(chunkSize, piece.Length - i);
+                        yield return piece.Substring(i, len);
+                    }
+                    carry = null;
                     continue;
                 }
                 carry = null;
