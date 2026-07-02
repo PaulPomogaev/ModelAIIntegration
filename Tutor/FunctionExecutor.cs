@@ -15,18 +15,14 @@ namespace ConsoleAppAPI_II_GigaChat.Tutor
     {
         private readonly StudyPlan _plan;
         private readonly QuizEngine _quiz;
-        private readonly KnowledgeBase _kb;
-        private readonly GigaChatClient _gc;
         private readonly Action<string> _writeLine;   // вывод
         private readonly Func<string> _readLine;      // ввод (только для тестов)
         private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
-        public FunctionExecutor(StudyPlan plan, QuizEngine quiz, KnowledgeBase kb, GigaChatClient gc, Action<string> writeLine, Func<string> readLine)
+        public FunctionExecutor(StudyPlan plan, QuizEngine quiz, Action<string> writeLine, Func<string> readLine)
         {
             _plan = plan;
             _quiz = quiz;
-            _kb = kb;
-            _gc = gc;
             _writeLine = writeLine;
             _readLine = readLine;
         }
@@ -39,7 +35,6 @@ namespace ConsoleAppAPI_II_GigaChat.Tutor
                 "list_topics" => _plan.ListAsJson(),
                 "mark_studied" => ExecuteMarkStudied(call.Arguments),
                 "quiz_me" => ExecuteQuizMe(call.Arguments),
-                "search_documents" => ExecuteSearchDocuments(call.Arguments),   // <-- новый
                 _ => JsonSerializer.Serialize(new { error = $"Неизвестная функция: {call.Name}" }, JsonOpts)
             };
         }
@@ -131,29 +126,7 @@ namespace ConsoleAppAPI_II_GigaChat.Tutor
             return JsonSerializer.Serialize(result, JsonOpts);
         }
 
-        private string ExecuteSearchDocuments(JsonElement args)
-        {
-            string query = GetStr(args, "query") ?? "";
-            if (string.IsNullOrWhiteSpace(query))
-                return JsonSerializer.Serialize(new { error = "Не указан запрос для поиска." }, JsonOpts);
-
-            // Небольшой вывод в консоль для наглядности (как у преподавателя)
-            _writeLine($"  [ищу в лекциях: {query}]");
-
-            // Ищем топ-3 куска по смыслу
-            var results = _kb.Search(query, _gc, topK: 3);
-
-            // Формируем JSON с результатами
-            var data = results.Select(s => new
-            {
-                source = s.Chunk.Source,
-                text = s.Chunk.Text,
-                score = s.Score
-            });
-
-            return JsonSerializer.Serialize(new { results = data }, JsonOpts);
-        }
-
+        
         private static string? GetStr(JsonElement obj, string field) =>
             obj.ValueKind == JsonValueKind.Object
             && obj.TryGetProperty(field, out var v)

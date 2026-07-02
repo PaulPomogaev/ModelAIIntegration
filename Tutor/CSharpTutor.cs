@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ConsoleAppAPI_II_GigaChat.GigaChat;
 using ConsoleAppAPI_II_GigaChat.GigaChat.Models;
 using ConsoleAppAPI_II_GigaChat.Knowledge;
+using ConsoleAppAPI_II_GigaChat.Knowledge.Models;
 using Serilog;
 
 namespace ConsoleAppAPI_II_GigaChat.Tutor
@@ -31,7 +32,7 @@ namespace ConsoleAppAPI_II_GigaChat.Tutor
 
             var plan = new StudyPlan(write);                  // передаём write
             var quiz = new QuizEngine(gc);
-            _executor = new FunctionExecutor(plan, quiz, kb, gc, write, read);
+            _executor = new FunctionExecutor(plan, quiz, write, read);
         }
 
         // Память диалога. Системный промпт — "характер и правила" наставника.
@@ -117,30 +118,75 @@ namespace ConsoleAppAPI_II_GigaChat.Tutor
 
         public void HandleUserInput(string input)
         {
-            _history.Add(new ChatMessage("user", input));
-            Log.Information("Вопрос пользователя: {Question}", input);
+            // Вызываем Ask с делегатом для вывода сообщения о поиске
+            var (answer, sources) = Ask(input, query => _write($"  [ищу в лекциях: {query}]"));
+
+            // Выводим ответ
+            _write($"\nНаставник: {answer}\n");
+
+            // Если есть источники – показываем их
+            if (sources.Any())
+            {
+                _write("Источники: " + string.Join(", ", sources.Select(s => $"{s.Chunk.Source} ({s.Score:0.00})")) + "\n");
+            }
+        }
+
+        public (string Answer, List<Scored> Sources) Ask(string question, Action<string>? onSearch = null)
+        {
+            _history.Add(new ChatMessage("user", question));
+            Log.Information("Вопрос пользователя: {Question}", question);
 
             var reply = _gc.ChatWithFunctions(_history, Functions);
 
-            string answer;
-            if (reply.FunctionCall is not null)
+            if (reply.FunctionCall is { Name: "search_documents" })
             {
-                // Модель решила вызвать функцию
+                // Модель решила искать в документах
                 _history.Add(reply with { Content = reply.Content ?? "" });
-                string result = _executor.Execute(reply.FunctionCall);
-                _history.Add(new ChatMessage("function", result, Name: reply.FunctionCall.Name));
+                string query = GetStr(reply.FunctionCall.Arguments, "query") ?? question;
+                onSearch?.Invoke(query);
 
-                // Финальный ответ УЖЕ БЕЗ функций (чтобы не зациклилась)
-                answer = _gc.Chat(_history);
+                // Поиск по смыслу
+                List<Scored> top = _kb.Search(query, _gc, topK: 3);
+
+                // Возвращаем результат как ответ функции
+                string result = JsonSerializer.Serialize(new
+                {
+                    results = top.Select(s => new { source = s.Chunk.Source, text = s.Chunk.Text })
+                }, JsonOpts);
+                _history.Add(new ChatMessage("function", result, Name: "search_documents"));
+
+                // Финальный ответ БЕЗ функций
+                string answer = _gc.Chat(_history);
+                _history.Add(new ChatMessage("assistant", answer));
+                return (answer, top);
+            }
+            else if (reply.FunctionCall is not null)
+            {
+                // Другие функции (add_topic, quiz_me, mark_studied, list_topics) — через FunctionExecutor
+                _history.Add(reply with { Content = reply.Content ?? "" });
+                string functionResult = _executor.Execute(reply.FunctionCall);
+                _history.Add(new ChatMessage("function", functionResult, Name: reply.FunctionCall.Name));
+
+                // Финальный ответ
+                string answer = _gc.Chat(_history);
+                _history.Add(new ChatMessage("assistant", answer));
+                return (answer, new List<Scored>());
             }
             else
             {
-                answer = reply.Content ?? "";
+                // Обычный ответ без функций
+                string answer = reply.Content ?? "";
+                _history.Add(new ChatMessage("assistant", answer));
+                return (answer, new List<Scored>());
             }
-
-            _history.Add(new ChatMessage("assistant", answer));
-            _write($"\nНаставник: {answer}\n");
         }
+
+        private static string? GetStr(JsonElement obj, string field) =>
+            obj.ValueKind == JsonValueKind.Object
+            && obj.TryGetProperty(field, out var v)
+            && v.ValueKind == JsonValueKind.String
+            ? v.GetString()
+            : null;
     }
 }
 
