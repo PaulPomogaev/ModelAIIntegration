@@ -54,7 +54,7 @@ namespace GigaChatIntegration
             else
             {
                 Console.WriteLine($"Индексирую документы из папки {DocsFolder}/ ...");
-                kb.BuildFromFolder(DocsFolder, gc);
+                kb.BuildFromFolderAsync(DocsFolder, gc);
                 kb.Save(IndexFile);
                 Console.WriteLine($"Готово: {kb.Count} кусков, индекс сохранён в {IndexFile}.\n");
             }
