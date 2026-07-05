@@ -16,7 +16,7 @@ namespace GigaChatIntegration
         private const string DocsFolder = "docs";
         private const string IndexFile = "index.json";
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             // Логгер 
             Log.Logger = new LoggerConfiguration()
@@ -54,7 +54,7 @@ namespace GigaChatIntegration
             else
             {
                 Console.WriteLine($"Индексирую документы из папки {DocsFolder}/ ...");
-                kb.BuildFromFolderAsync(DocsFolder, gc);
+                await kb.BuildFromFolderAsync(DocsFolder, gc);
                 kb.Save(IndexFile);
                 Console.WriteLine($"Готово: {kb.Count} кусков, индекс сохранён в {IndexFile}.\n");
             }
@@ -76,15 +76,20 @@ namespace GigaChatIntegration
                 if (string.Equals(input, "выход", StringComparison.OrdinalIgnoreCase)) break;
                 if (string.IsNullOrWhiteSpace(input)) continue;
 
-                try
+                var (answer, sources, quiz) = await tutor.AskAsync(input);
+
+                if (quiz != null)
                 {
-                    tutor.HandleUserInput(input);
+                    // Это вопрос теста – выводим его и ждём ответ
+                    Console.WriteLine(answer);
+                    Console.Write("Ваш ответ (номер): ");
+                    var userAnswer = Console.ReadLine();
+                    (answer, sources) = await tutor.SubmitQuizAnswerAsync(input, userAnswer, quiz);
                 }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Ошибка в цикле диалога");
-                    Console.WriteLine("Произошла ошибка. Проверьте логи.");
-                }
+
+                Console.WriteLine($"\nНаставник: {answer}\n");
+                if (sources.Any())
+                    Console.WriteLine("Источники: " + string.Join(", ", sources.Select(s => $"{s.Chunk.Source} ({s.Score:0.00})")) + "\n");
             }
 
         }
