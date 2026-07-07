@@ -7,6 +7,8 @@ using GigaChatIntegrationCore.Knowledge.Models;
 using GigaChatIntegrationCore.Knowledge;
 using GigaChatIntegrationCore.Tutor;
 using GigaChatIntegrationCore.Tutor.Models;
+using GigaChatIntegrationCore.Ollama;
+using GigaChatIntegrationCore;
 
 
 namespace GigaChatIntegration
@@ -14,8 +16,7 @@ namespace GigaChatIntegration
     internal class Program
     {
         private const string DocsFolder = "docs";
-        private const string IndexFile = "index.json";
-
+                
         static async Task Main(string[] args)
         {
             // Логгер 
@@ -39,27 +40,44 @@ namespace GigaChatIntegration
             string authKey = configuration["GigaChat:AuthKey"];  // Базовый ключ авторизации для API          
 
 
-            Console.WriteLine("Подключаюсь к GigaChat..."); // собираем зависимости
-            var gc = new GigaChatClient(authKey, chatUrl, authUrl, embUrl);
-            var kb = new KnowledgeBase();
+            Console.WriteLine("Подключаюсь к ИИ..."); // собираем зависимости
+            Console.Write("Выберите модель (1 – GigaChat, 2 – Ollama): ");
+            var choice = Console.ReadLine();
 
+            ILanguageModel llm;
+
+            if (choice == "2")
+                llm = new OllamaClient("qwen3.6:latest", "nomic-embed-text");
+            else
+                llm = new GigaChatClient(authKey, chatUrl, authUrl, embUrl);
+
+            
             // Индекс уже посчитан? Загружаем с диска (мгновенно). Нет — строим из документов
             // и сохраняем, чтобы при следующем запуске не платить за эмбеддинги снова.
-            if (File.Exists(IndexFile))
+            // Определяем имя файла индекса в зависимости от выбранной модели
+            string indexFile = (choice == "2")
+                ? "index.ollama.json"
+                : "index.gigachat.json";
+
+            Console.WriteLine($"Использую индекс: {indexFile}");
+
+            var kb = new KnowledgeBase();
+
+            if (File.Exists(indexFile))
             {
-                kb.Load(IndexFile);
+                kb.Load(indexFile);
                 Console.WriteLine($"Загрузил индекс с диска: {kb.Count} кусков.");
-                Console.WriteLine($"(изменил документы? удали {IndexFile} — пересоберётся заново)\n");
+                Console.WriteLine($"(изменил документы? удали {indexFile} — пересоберётся заново)\n");
             }
             else
             {
                 Console.WriteLine($"Индексирую документы из папки {DocsFolder}/ ...");
-                await kb.BuildFromFolderAsync(DocsFolder, gc);
-                kb.Save(IndexFile);
-                Console.WriteLine($"Готово: {kb.Count} кусков, индекс сохранён в {IndexFile}.\n");
+                await kb.BuildFromFolderAsync(DocsFolder, llm);
+                kb.Save(indexFile);
+                Console.WriteLine($"Готово: {kb.Count} кусков, индекс сохранён в {indexFile}.\n");
             }
 
-            var tutor = new CSharpTutor(gc, kb);
+            var tutor = new CSharpTutor(llm, kb);
 
             Console.WriteLine("=== ИИ-наставник по C# ===");
             Console.WriteLine("Спроси что угодно по C#. Примеры:");
