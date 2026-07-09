@@ -1,0 +1,12 @@
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\bin\Debug\net9.0\GigaChatIntegrationCore.deps.json
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\bin\Debug\net9.0\GigaChatIntegrationCore.dll
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\bin\Debug\net9.0\GigaChatIntegrationCore.pdb
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\GigaChatIntegrationCore.csproj.AssemblyReference.cache
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\GigaChatIntegrationCore.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\GigaChatIntegrationCore.AssemblyInfoInputs.cache
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\GigaChatIntegrationCore.AssemblyInfo.cs
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\GigaChatIntegrationCore.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\GigaChatIntegrationCore.dll
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\refint\GigaChatIntegrationCore.dll
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\GigaChatIntegrationCore.pdb
+C:\Users\Administrator\source\repos\GigaChatIntegrationCore\obj\Debug\net9.0\ref\GigaChatIntegrationCore.dll

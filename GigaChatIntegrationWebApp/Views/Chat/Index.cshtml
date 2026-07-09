@@ -1,0 +1,143 @@
+﻿@using ModelAIIntegrationWebApp.Models
+@model ChatViewModel
+@{
+    ViewData["Title"] = "Задай вопрос об учёбе";
+}
+
+<section class="ask">
+    <h1>Задай вопрос об учёбе</h1>
+    <p class="muted">
+        Задай вопрос обычными словами — помощник-преподаватель найдёт ответ по документам школы
+        <b>по смыслу</b> и покажет, из какого файла он взят.
+    </p>
+
+    <!-- Основная форма вопроса -->
+    <form asp-controller="Chat" asp-action="Ask" method="post" class="ask-form">
+        @* Секция выбора нейросети *@
+        <div class="model-picker">
+            <label class="picker-field">
+                <span class="picker-label">Нейросеть</span>
+                <select name="provider" id="provider-select" class="picker-select">
+                    <option value="GigaChat" selected="@(Model.SelectedProvider == "GigaChat")">☁️ GigaChat</option>
+                    <option value="Ollama" selected="@(Model.SelectedProvider == "Ollama")">🖥️ Ollama (локально)</option>
+                    <option value="Gemini" selected="@(Model.SelectedProvider == "Gemini")">✨ Gemini (Google)</option>
+                </select>
+            </label>
+            <label class="picker-field" id="ollama-model-field">
+                <span class="picker-label">Модель Ollama</span>
+                @if (Model.OllamaModels.Count > 0)
+                {
+                    <select name="ollamaModel" id="ollama-model-select" class="picker-select">
+                        @foreach (var m in Model.OllamaModels)
+                        {
+                            <option value="@m" selected="@(m == Model.SelectedOllamaModel)">@m</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <span class="picker-hint muted">Ollama не отвечает — модели не найдены</span>
+                    <input type="hidden" name="ollamaModel" value="@Model.SelectedOllamaModel" />
+                }
+            </label>
+        </div>
+
+        @* Поле ввода вопроса *@
+        <div class="ask-row">
+            <input type="text" name="question" class="ask-input"
+                   placeholder="например: что такое брокеры сообщений?"
+                   value="@Model.Question" autocomplete="off" autofocus />
+            <button type="submit" class="ask-btn">Спросить</button>
+        </div>
+    </form>
+
+    @* Примеры (кликабельные подсказки) *@
+    <div class="examples">
+        <span class="muted">Примеры:</span>
+        <button type="button" class="chip" data-q="что такое брокеры сообщений?">про брокеры сообщений</button>
+        <button type="button" class="chip" data-q="как реализуется принцип SOLID?">про принципы программирования</button>
+        <button type="button" class="chip" data-q="что такое dependency Injection (DI)?">про ASP.NET</button>
+        <button type="button" class="chip" data-q="помести интересующую тему в дневник обучения">дневник обучения</button>
+        <button type="button" class="chip" data-q="проведи тестирование">тестирование по теме</button>
+    </div>
+
+    @* Отображение ошибок *@
+    @if (Model.HasError)
+    {
+        <div class="error-box">⚠ @Model.Error</div>
+    }
+
+    @* Блок теста (если активен) *@
+    @if (Model.IsQuizQuestion)
+    {
+        <div class="quiz-box">
+            <p style="white-space: pre-line;">@Model.Answer</p>
+            <form asp-controller="Chat" asp-action="AnswerQuiz" method="post" class="ask-form">
+                <input type="hidden" name="originalQuestion" value="@Model.OriginalQuestion" />
+                <input type="hidden" name="quizQuestionJson" value="@Model.QuizQuestionJson" />
+                <input type="hidden" name="provider" value="@Model.SelectedProvider" />
+                <input type="hidden" name="ollamaModel" value="@Model.SelectedOllamaModel" />
+                <input type="text" name="userAnswer" class="ask-input" placeholder="Введите номер ответа" autofocus />
+                <button type="submit" class="ask-btn">Ответить</button>
+            </form>
+        </div>
+    }
+    else if (Model.HasHistory)
+    {
+        <div class="history-head">
+            <span class="muted">Диалог · вопросов: @Model.Turns.Count</span>
+            <form asp-controller="Chat" asp-action="Reset" method="post" class="reset-form">
+                <button type="submit" class="reset-btn">🗑 Новый диалог</button>
+            </form>
+        </div>
+
+        <div class="history">
+            @foreach (var turn in Model.Turns)
+            {
+                <article class="answer">
+                    <div class="answer-q">❓ @turn.Question</div>
+                    <div class="answer-a">@turn.Answer</div>
+                    <div class="answer-provider">
+                        Ответил: <b>@turn.ProviderName</b>
+                        @if (turn.ProviderModel != turn.ProviderName)
+                        {
+                            <span class="muted">(@turn.ProviderModel)</span>
+                        }
+                    </div>
+                    @if (turn.Sources.Count > 0)
+                    {
+                        <div class="answer-src">
+                            <span class="src-label">Источники:</span>
+                            @foreach (var source in turn.Sources)
+                            {
+                                <span class="src">@source</span>
+                            }
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@section Scripts {
+    <script>
+        // Клик по примеру подставляет вопрос в поле ввода
+        document.querySelectorAll('.chip').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var input = document.querySelector('.ask-input');
+                input.value = chip.dataset.q;
+                input.focus();
+            });
+        });
+
+        // Поле выбора модели Ollama показываем только когда выбрана Ollama
+        var providerSelect = document.getElementById('provider-select');
+        var ollamaField = document.getElementById('ollama-model-field');
+        function syncProviderUI() {
+            ollamaField.style.display = providerSelect.value === 'Ollama' ? '' : 'none';
+        }
+        providerSelect.addEventListener('change', syncProviderUI);
+        syncProviderUI();
+    </script>
+}
