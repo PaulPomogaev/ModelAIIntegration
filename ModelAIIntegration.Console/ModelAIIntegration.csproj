@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\GigaChatIntegrationCore\ModelAIIntegrationCore.csproj" />
+        <ProjectReference Include="..\ModelAIIntegration.Core\ModelAIIntegrationCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>
