@@ -9,6 +9,7 @@ using GigaChatIntegrationCore.Tutor;
 using GigaChatIntegrationCore.Tutor.Models;
 using GigaChatIntegrationCore.Ollama;
 using GigaChatIntegrationCore;
+using GigaChatIntegrationCore.Gemini;
 
 
 namespace GigaChatIntegration
@@ -42,24 +43,29 @@ namespace GigaChatIntegration
 
 
             Console.WriteLine("Подключаюсь к ИИ..."); // собираем зависимости
-            Console.Write("Выберите модель (1 – GigaChat, 2 – Ollama): ");
+            Console.Write("Выберите модель (1 – GigaChat, 2 – Ollama, 3 – Gemini): ");
             var choice = Console.ReadLine();
 
             ILanguageModel llm;
 
-            if (choice == "2")
+            if (choice == "3")
+                llm = new GeminiClient(apiKey);
+            else if(choice == "2")
                 llm = new OllamaClient("qwen2.5:1.5b", "nomic-embed-text");
             else
                 llm = await GigaChatClient.CreateAsync(authKey, chatUrl, authUrl, embUrl);
 
-            
-            // Индекс уже посчитан? Загружаем с диска (мгновенно). Нет — строим из документов
+
+            // Индекс уже посчитан? Загружаем с диска (мгновенно). Нет, тогда строим из документов
             // и сохраняем, чтобы при следующем запуске не платить за эмбеддинги снова.
             // Определяем имя файла индекса в зависимости от выбранной модели
-            string indexFile = (choice == "2")
-                ? "index.Ollama.json"
-                : "index.GigaChat.json";
-
+            string indexFile = choice switch
+            {
+                "2" => "index.Ollama.json",
+                "3" => "index.Gemini.json",
+                _ => "index.GigaChat.json"
+            };
+                
             Console.WriteLine($"Использую индекс: {indexFile}");
 
             var kb = new KnowledgeBase();
