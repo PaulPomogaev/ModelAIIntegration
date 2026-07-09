@@ -1,18 +1,18 @@
 ﻿using Serilog;
 using Microsoft.Extensions.Configuration;
 using Serilog.Sinks.SystemConsole.Themes;
-using GigaChatIntegrationCore.GigaChat.Models;
-using GigaChatIntegrationCore.GigaChat;
-using GigaChatIntegrationCore.Knowledge.Models;
-using GigaChatIntegrationCore.Knowledge;
-using GigaChatIntegrationCore.Tutor;
-using GigaChatIntegrationCore.Tutor.Models;
-using GigaChatIntegrationCore.Ollama;
-using GigaChatIntegrationCore;
-using GigaChatIntegrationCore.Gemini;
+using ModelAIIntegrationCore.GigaChat.Models;
+using ModelAIIntegrationCore.Knowledge.Models;
+using ModelAIIntegrationCore.Knowledge;
+using ModelAIIntegrationCore.Tutor;
+using ModelAIIntegrationCore.Tutor.Models;
+using ModelAIIntegrationCore.Ollama;
+using ModelAIIntegrationCore.Gemini;
+using ModelAIIntegrationCore;
+using ModelAIIntegrationCore.GigaChat;
 
 
-namespace GigaChatIntegration
+namespace ModelAIIntegration
 {
     internal class Program
     {
