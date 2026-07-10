@@ -1,4 +1,4 @@
-# 🤖 AI Mentor C# — учебный проект ИИ-наставника по C# с поддержкой GigaChat, Gemini и локальной Ollama
+# 🤖 AI Mentor C# - учебный проект ИИ-наставника по C# с поддержкой GigaChat, Gemini и локальной Ollama
 
 <div align="center">
   <img src="https://github.com/user-attachments/assets/70cd45a7-bd06-4eb5-bc82-3e7953172443" alt="AI Mentor C#" width="600">
