@@ -1,11 +1,10 @@
 # 🤖 AI Mentor C# — учебный проект ИИ-наставника по C# с поддержкой GigaChat, Gemini и локальной Ollama
 
 <div align="center">
-  <img src="screenshots/1.jpg" alt="AI Mentor C#" width="80%">
-  <br>
-  <sub>Интерактивный наставник по C# с поиском по лекциям, планом обучения и генерацией тестов</sub>
+  <img src="https://github.com/user-attachments/assets/70cd45a7-bd06-4eb5-bc82-3e7953172443" alt="AI Mentor C#" width="600">
+  <br><sub>Интерактивный наставник по C# с поиском по лекциям, планом обучения и генерацией тестов</sub>
 </div>
-
+ 
 ---
 
 ## 📂 Содержание
@@ -252,189 +251,20 @@ public interface ILanguageModel
 ```
 
 **Провайдет ИИ:**
-
+Клиент Gemini - настройка прокси, сериализация, обработка ошибок
 ```csharp
 public class GeminiClient : ILanguageModel
 {
-    private readonly string chatModel;
-    private readonly string embedModel;
-    private readonly string generateUrl;
-    private readonly string batchEmbedUrl;
-
-    // camelCase (Web) сам переводит systemInstruction/functionCall/functionResponse/toolConfig;
-    // WhenWritingNull — чтобы пустые варианты part (text/functionCall/functionResponse) не улетали
-    // как null и не ломали запрос.
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    private readonly HttpClient http;
-
-    public GeminiClient(string apiKey, string chatModel = "gemini-2.5-flash", string embedModel = "gemini-embedding-001", string baseUrl = "https://generativelanguage.googleapis.com", string? proxyUrl = null)
-    {
-        this.chatModel = chatModel;
-        this.embedModel = embedModel;
-        string root = baseUrl.TrimEnd('/');
-        generateUrl = $"{root}/v1beta/models/{chatModel}:generateContent";
-        batchEmbedUrl = $"{root}/v1beta/models/{embedModel}:batchEmbedContents";
-
-        // Настройка прокси, если задан
-        HttpClientHandler handler = new();
-        if (!string.IsNullOrWhiteSpace(proxyUrl))
-        {
-            handler.Proxy = new WebProxy(proxyUrl);
-            handler.UseProxy = true;
-        }
-
-        http = new HttpClient(handler);
-
-        // Ключ — заголовком на всё соединение (в конструкторе сети НЕТ, только настройка).
-        http.DefaultRequestHeaders.Add("x-goog-api-key", apiKey);
-    }
+    public GeminiClient(string apiKey, string proxyUrl = null) { /* HttpClient + WebProxy */ }
 
     public async Task<string> ChatAsync(List<ChatMessage> messages, double? temperature = null)
     {
-        var (system, contents) = ToGemini(messages);
-        object? generationConfig = null;
-        if (temperature.HasValue)
-            generationConfig = new { temperature = temperature.Value };
-
-        var body = new GeminiGenerateRequest(contents, system, GenerationConfig: generationConfig);
-        var reply = await PostAsync<GeminiGenerateResponse>(generateUrl, body);
-        return FromGemini(reply).Content ?? "";
+        var body = GeminiRequestBuilder.Build(messages, temperature);
+        var response = await PostAsync<GeminiResponse>(generateUrl, body);
+        return ResponseParser.ExtractText(response);
     }
-
-    public async Task<ChatMessage> ChatWithFunctionsAsync(List<ChatMessage> messages, List<FunctionDef> functions)
-    {
-        var (system, contents) = ToGemini(messages);
-        var tools = new List<GeminiTool>
-        {
-            new(functions.Select(f => new GeminiFunctionDeclaration(f.Name, f.Description, f.Parameters)).ToList()),
-        };
-
-        var body = new GeminiGenerateRequest(contents, system, tools, new GeminiToolConfig(new GeminiFunctionCallingConfig("AUTO")));
-        var reply = await PostAsync<GeminiGenerateResponse>(generateUrl, body);
-        return FromGemini(reply);
-    }
-
-    public async Task<float[][]> EmbedAsync(List<string> texts)
-    {
-        var requests = texts.Select(t => new GeminiEmbedRequestItem($"models/{embedModel}", new GeminiContent(null, new List<GeminiPart> { new(Text: t) }))).ToList();
-        var result = await PostAsync<GeminiBatchEmbedResponse>(batchEmbedUrl, new GeminiBatchEmbedRequest(requests));
-        return result.Embeddings.Select(e => e.Values).ToArray();
-    }
-
-    // Наш общий ChatMessage[] → формат Gemini: системный промпт уходит в systemInstruction,
-    // остальное — в contents (role user/model, результат функции — role:"user" + functionResponse).
-    private static (GeminiContent? System, List<GeminiContent> Contents) ToGemini(List<ChatMessage> messages)
-    {
-        GeminiContent? system = null;
-        var contents = new List<GeminiContent>();
-
-        foreach (var m in messages)
-        {
-            if (m.Role == "system")
-            {
-                system = new GeminiContent(null, new List<GeminiPart> { new(Text: m.Content ?? "") });
-            }
-            else if (m.Role == "function")
-            {
-                // Результат нашей функции. Gemini ждёт его как part functionResponse c role:"user".
-                // Тело результата у нас — JSON-строка ({"results":[...]}), Gemini хочет объект.
-                contents.Add(new GeminiContent("user", new List<GeminiPart>
-                {
-                    new(FunctionResponse: new GeminiFunctionResponse(m.Name ?? "", ParseResponse(m.Content))),
-                }));
-            }
-            else
-            {
-                string role = m.Role == "assistant" ? "model" : "user";
-                GeminiPart part = m.FunctionCall is { } fc
-                    ? new GeminiPart(FunctionCall: new GeminiFunctionCall(fc.Name, fc.Arguments))
-                    : new GeminiPart(Text: m.Content ?? "");
-                contents.Add(new GeminiContent(role, new List<GeminiPart> { part }));
-            }
-        }
-
-        return (system, contents);
-    }
-
-    // Ответ Gemini → наш общий ChatMessage. Если среди parts есть functionCall — берём его
-    // (просим одну функцию), иначе склеиваем текстовые parts.
-    private static ChatMessage FromGemini(GeminiGenerateResponse reply)
-    {
-        var parts = reply.Candidates?.FirstOrDefault()?.Content?.Parts ?? new List<GeminiPart>();
-
-        var call = parts.FirstOrDefault(p => p.FunctionCall is not null)?.FunctionCall;
-        if (call is not null)
-            return new ChatMessage("assistant", null, new FunctionCall(call.Name, call.Args));
-
-        string text = string.Concat(parts.Where(p => p.Text is not null).Select(p => p.Text));
-        return new ChatMessage("assistant", text);
-    }
-
-    // Тело результата функции: строка → JSON-объект (Gemini ждёт объект в response).
-    // Не распарсилось (вдруг не JSON) — заворачиваем в { result: "..." }.
-    private static object ParseResponse(string? content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-            return new { };
-        try
-        {
-            return JsonSerializer.Deserialize<JsonElement>(content);
-        }
-        catch (JsonException)
-        {
-            return new { result = content };
-        }
-    }
-
-    private async Task<T> PostAsync<T>(string url, object body)
-    {
-        string json = JsonSerializer.Serialize(body, JsonOpts);
-        using var request = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
-        };
-
-        using HttpResponseMessage response = await SendOrThrowAsync(request);
-        if (!response.IsSuccessStatusCode)
-        {
-            // Тело ошибки Gemini содержательное (в т.ч. «User location is not supported» из РФ) —
-            // показываем его, а не голый статус.
-            string error = await response.Content.ReadAsStringAsync();
-            throw new InvalidOperationException(
-                $"Gemini ответил {(int)response.StatusCode}. {Shorten(error)}");
-        }
-
-        string respBody = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<T>(respBody, JsonOpts)!;
-    }
-
-    // Нет сети / DNS / гео-блок на уровне соединения → понятная подсказка (частый случай из РФ).
-    private async Task<HttpResponseMessage> SendOrThrowAsync(HttpRequestMessage request)
-    {
-        try
-        {
-            return await http.SendAsync(request);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new InvalidOperationException(
-                "Не достучался до Gemini API (generativelanguage.googleapis.com). Проверь интернет; " +
-                "из России API заблокирован по IP — нужен VPN/прокси в поддерживаемой стране.",
-                ex);
-        }
-    }
-
-    private static string Shorten(string s)
-    {
-        s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
-        return s.Length <= 300 ? s : s[..300] + "…";
-    }
-}
 ```
+// Фрагмент кода. Полный код: [ссылка на файл в репозитории](https://github.com/PaulPomogaev/ModelAIIntegration/blob/master/ModelAIIntegration.Core/Gemini/GeminiClient.cs)
 
 ### 2. RAG: индексация и поиск
  `KnowledgeBase`читает `.md` файлы, разбивает на чанки, получает векторы и сохраняет их в индекс. Поиск вычисляет косинусное сходство вопроса с каждым чанком.
@@ -484,9 +314,18 @@ private List<ChatTurn> LoadTurns() =>
 
 ## 📸 Демонстрация
 
-| Главная страница веб-интерфейса | Тестирование по теме | История диалога |
-|---------------------------|---------------------|--------------------------|
-| ![Catalog](screenshots/main.jpg) | ![Cart](screenshots/cart.jpg) | ![Admin](screenshots/admin-panel.jpg) |
+<table>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/70cd45a7-bd06-4eb5-bc82-3e7953172443" alt="Главная страница" width="400"></td>
+    <td><img src="https://github.com/user-attachments/assets/5a12e5f2-8e21-4696-85c4-e58f0286a87c" alt="История диалога" width="400"></td>
+    <td><img src="https://github.com/user-attachments/assets/a28ba471-252a-445c-8459-2b2f3e078ba3" alt="Тестирование" width="400"></td>
+  </tr>
+  <tr>
+    <td align="center">Главная страница</td>
+    <td align="center">История диалога</td>
+    <td align="center">Тестирование</td>
+  </tr>
+</table>
 
 ## 🚀 Запуск проекта
 
