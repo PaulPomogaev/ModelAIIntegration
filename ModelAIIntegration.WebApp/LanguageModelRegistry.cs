@@ -33,9 +33,10 @@ namespace ModelAIIntegrationWebApp
             {
                 var section = _configuration.GetSection("Gemini");
                 string apiKey = section["ApiKey"];
+                string? proxyUrl = section["ProxyUrl"];  // прокси можно не указывать, может быть null
                 if (string.IsNullOrWhiteSpace(apiKey))
                     throw new InvalidOperationException("Не задан Gemini:ApiKey в appsettings.json");
-                return new GeminiClient(apiKey);
+                return new GeminiClient(apiKey, proxyUrl: proxyUrl);
             }
 
             if (_gigaChat == null)

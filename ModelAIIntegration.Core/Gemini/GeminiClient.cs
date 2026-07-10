@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using ModelAIIntegrationCore;
 using ModelAIIntegrationCore.GigaChat.Models;
 using ModelAIIntegrationCore.Gemini.Models;
+using System.Net;
 
 namespace ModelAIIntegrationCore.Gemini
 {
@@ -27,15 +28,25 @@ namespace ModelAIIntegrationCore.Gemini
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         };
 
-        private readonly HttpClient http = new();
+        private readonly HttpClient http;
 
-        public GeminiClient(string apiKey, string chatModel = "gemini-2.5-flash", string embedModel = "gemini-embedding-001", string baseUrl = "https://generativelanguage.googleapis.com")
+        public GeminiClient(string apiKey, string chatModel = "gemini-2.5-flash", string embedModel = "gemini-embedding-001", string baseUrl = "https://generativelanguage.googleapis.com", string? proxyUrl = null)
         {
             this.chatModel = chatModel;
             this.embedModel = embedModel;
             string root = baseUrl.TrimEnd('/');
             generateUrl = $"{root}/v1beta/models/{chatModel}:generateContent";
             batchEmbedUrl = $"{root}/v1beta/models/{embedModel}:batchEmbedContents";
+
+            // Настройка прокси, если задан
+            HttpClientHandler handler = new();
+            if (!string.IsNullOrWhiteSpace(proxyUrl))
+            {
+                handler.Proxy = new WebProxy(proxyUrl);
+                handler.UseProxy = true;
+            }
+
+            http = new HttpClient(handler);
 
             // Ключ — заголовком на всё соединение (в конструкторе сети НЕТ, только настройка).
             http.DefaultRequestHeaders.Add("x-goog-api-key", apiKey);

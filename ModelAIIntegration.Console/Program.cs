@@ -40,6 +40,7 @@ namespace ModelAIIntegration
             string embUrl = configuration["GigaChat:EmbeddingsUrl"]!;
             string authKey = configuration["GigaChat:AuthKey"];  // Базовый ключ авторизации для API GigaChat
             string apiKey = configuration["Gemini:ApiKey"]; // Базовый ключ авторизации API для Gemini
+            string? proxyUrl = configuration["Gemini:ProxyUrl"]; // прокси для Gemini для удобства, можно не указывать, если не нужно
 
 
             Console.WriteLine("Подключаюсь к ИИ..."); // собираем зависимости
@@ -49,7 +50,7 @@ namespace ModelAIIntegration
             ILanguageModel llm;
 
             if (choice == "3")
-                llm = new GeminiClient(apiKey);
+                llm = new GeminiClient(apiKey, proxyUrl: proxyUrl);
             else if(choice == "2")
                 llm = new OllamaClient("qwen2.5:1.5b", "nomic-embed-text");
             else
