@@ -313,6 +313,15 @@ private List<ChatTurn> LoadTurns() =>
 ```
 
 ## 📸 Демонстрация
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/e20933c7-2147-4255-8c6b-8f4073188e7d" alt="Демонстрация AI Mentor C#" width="700">
+  <br>
+  <sub>Диалог с наставником: вопрос по лекциям, генерация теста, ответ с пояснением</sub>
+</div>
+
+---
+
+**📷 Скриншоты интерфейса**
 
 <table>
   <tr>
